@@ -26,7 +26,11 @@ enum CDVLocationStatus {
     POSITIONUNAVAILABLE,
     TIMEOUT
 };
+
 typedef NSUInteger CDVLocationStatus;
+
+NSUInteger WARNING_PRECISION_IS_NOT_ACCURATE = 42;
+
 
 // simple object to keep track of location information
 @interface CDVLocationData : NSObject {

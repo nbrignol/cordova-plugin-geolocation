@@ -60,6 +60,11 @@
     __locationStarted = NO;
     __highAccuracyEnabled = NO;
     self.locationData = nil;
+
+    
+
+    NSLog(@"CDVLocation::pluginInitialize (fork)");
+    
 }
 
 - (BOOL)isAuthorized
@@ -127,6 +132,7 @@
         } else {
             NSLog(@"[Warning] No NSLocationAlwaysUsageDescription or NSLocationWhenInUseUsageDescription key is defined in the Info.plist file.");
         }
+        
         return;
     }
 #endif
@@ -189,6 +195,10 @@
         [self _stopLocation];
     }
 }
+
+
+//- (void)locationManager:(CLLocationManager *)manager  didUpdateLocations:(NSArray<CLLocation *> *)l
+ocations;
 
 - (void)getLocation:(CDVInvokedUrlCommand*)command
 {
@@ -287,8 +297,12 @@
         // return error
         result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:POSITIONUNAVAILABLE];
     } else if (lData && lData.locationInfo) {
+
+        NSLog(@"locationManager::returnLocationInfo callbackId: %@", callbackId);
+
         CLLocation* lInfo = lData.locationInfo;
-        NSMutableDictionary* returnInfo = [NSMutableDictionary dictionaryWithCapacity:8];
+        NSMutableDictionary* returnInfo = [NSMutableDictionary dictionaryWithCapacity:9];
+        
         NSNumber* timestamp = [NSNumber numberWithDouble:([lInfo.timestamp timeIntervalSince1970] * 1000)];
         [returnInfo setObject:timestamp forKey:@"timestamp"];
         [returnInfo setObject:[NSNumber numberWithDouble:lInfo.speed] forKey:@"velocity"];
@@ -298,6 +312,23 @@
         [returnInfo setObject:[NSNumber numberWithDouble:lInfo.altitude] forKey:@"altitude"];
         [returnInfo setObject:[NSNumber numberWithDouble:lInfo.coordinate.latitude] forKey:@"latitude"];
         [returnInfo setObject:[NSNumber numberWithDouble:lInfo.coordinate.longitude] forKey:@"longitude"];
+        
+        [returnInfo setObject: @"unknown" forKey:@"accuracyMode"];
+
+        if (@available(iOS 14, *)) {
+            if (self.locationManager ) {
+
+                if (self.locationManager.accuracyAuthorization == CLAccuracyAuthorizationFullAccuracy) {
+                    [returnInfo setObject: @"fullAccuracy" forKey:@"accuracyMode"];
+                }
+
+                if (self.locationManager.accuracyAuthorization == CLAccuracyAuthorizationReducedAccuracy) {
+                    [returnInfo setObject: @"reducedAccuracy" forKey:@"accuracyMode"];
+                }
+            }
+        } 
+
+        NSLog(@"locationManager::returnLocationInfo returnInfo: %@", returnInfo);
         
         result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:returnInfo];
         [result setKeepCallbackAsBool:keepCallback];
@@ -340,16 +371,18 @@
         // PositionError.POSITION_UNAVAILABLE = 2;
         // PositionError.TIMEOUT = 3;
         NSUInteger positionError = POSITIONUNAVAILABLE;
+        
         if (error.code == kCLErrorDenied) {
             positionError = PERMISSIONDENIED;
         }
+        
         [self returnLocationError:positionError withMessage:[error localizedDescription]];
     }
     
-    if (error.code != kCLErrorLocationUnknown) {
+    /*if (error.code != kCLErrorLocationUnknown) {
         [self.locationManager stopUpdatingLocation];
         __locationStarted = NO;
-    }
+    }*/
 }
 
 //iOS8+
@@ -358,7 +391,34 @@
     if(!__locationStarted){
         [self startLocation:__highAccuracyEnabled];
     }
+
+    [self checkReducedAccuracy: manager];
 }
+
+//iOS14+
+- (void)locationManagerDidChangeAuthorization:(CLLocationManager *)manager {
+    if(!__locationStarted){
+        [self startLocation:__highAccuracyEnabled];
+    }
+    
+    [self checkReducedAccuracy:manager];
+}
+
+- (void) checkReducedAccuracy: (CLLocationManager *)manager{
+
+    if (@available(iOS 14, *)) {
+        if (manager.accuracyAuthorization == CLAccuracyAuthorizationFullAccuracy) {
+            NSLog(@"didChangeAuthorizationStatus -- full accuracy");
+        }
+
+        if (manager.accuracyAuthorization == CLAccuracyAuthorizationReducedAccuracy) {
+            NSLog(@"didChangeAuthorizationStatus -- reduced accuracy");
+            [self returnLocationError: WARNING_PRECISION_IS_NOT_ACCURATE withMessage:@"WARNING_PRECISION_IS_NOT_ACCURATE"];
+        }
+    }
+
+}
+
 
 - (void)dealloc
 {
